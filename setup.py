@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 # Read version from __init__.py
 with open("irodb/__init__.py", "r", encoding="utf-8") as f:
     version_match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', f.read())
-    version = version_match.group(1) if version_match else "1.0.8"
+    version = version_match.group(1) if version_match else "1.0.0"
 
 # Read README
 try:
