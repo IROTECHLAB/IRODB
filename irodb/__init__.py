@@ -10,7 +10,7 @@ from .utils import DatabaseUtils
 from .exceptions import IRODBError, HashError, IntegrityError
 from .constants import VERSION, PAGE_SIZE, MAGIC_HEADER
 
-__version__ = "1.0.0"
+__version__ = "0.1.0"
 __all__ = [
     'IRODB',
     'HashManager',
