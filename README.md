@@ -73,10 +73,10 @@ cd irodb
 pip install -e .
 ```
 
-### Using pip (Coming Soon)
+### Using pip
 
 ```
-pip install irodb
+pip install irotechlab_irodb
 ```
 
 ## 📚 Documentation
