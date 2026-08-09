@@ -351,22 +351,6 @@ irodb/
     └── complete_example.py
 ```
 
-### Module Descriptions
-
-| Module | Description |
-|--------------------|
-| **core.py** | Main database engine with CRUD operations |
-| **hash_system.py** | SHA-256 hashing and integrity verification |
-| **utils.py** | Helper functions and utilities |
-| **transaction.py** | ACID transaction support |
-| **index.py** | Indexing and fast lookups |
-| **feature_fulltext.py** | Full-text search with TF-IDF ranking |
-| **feature_sql.py** | SQL-like query parser and executor |
-| **feature_validation.py** | Data validation and constraints |
-| **constants.py**  | Configuration constants |
-| **exceptions.py** | Custom exception classes |
-| **cli.py** | Command-line interface |
-
 ## 🧪 Running Tests
 
 ```bash
