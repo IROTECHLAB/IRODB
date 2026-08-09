@@ -354,7 +354,7 @@ irodb/
 ### Module Descriptions
 
 | Module | Description |
-|--------|------|-------------|
+|--------------------|
 | **core.py** | Main database engine with CRUD operations |
 | **hash_system.py** | SHA-256 hashing and integrity verification |
 | **utils.py** | Helper functions and utilities |
