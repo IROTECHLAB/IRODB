@@ -1,4 +1,7 @@
-# irodb/exceptions.py
+"""
+Exceptions for IRODB
+"""
+
 class IRODBError(Exception):
     """Base exception for IRODB"""
     pass
@@ -45,4 +48,20 @@ class NotFoundError(IRODBError):
 
 class DuplicateError(IRODBError):
     """Duplicate record error"""
+    pass
+
+class SearchError(IRODBError):
+    """Search operation error"""
+    pass
+
+class ValidationError(IRODBError):
+    """Validation error"""
+    pass
+
+class ConstraintError(IRODBError):
+    """Constraint violation error"""
+    pass
+
+class SQLError(IRODBError):
+    """SQL parsing/execution error"""
     pass
