@@ -3,6 +3,8 @@
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![PyPI version](https://img.shields.io/pypi/v/irotechlab-irodb.svg)](https://pypi.org/project/irotechlab-irodb/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/irotechlab-irodb.svg)](https://pypi.org/project/irotechlab-irodb/)
 
 ## 📋 Overview
 
@@ -19,11 +21,35 @@ IRODB is a lightweight, file-based database engine for Python applications. It p
 - **🛠️ Multi-Table Support**: Create and manage multiple tables
 - **🧹 Vacuum Operation**: Optimize database size and performance
 - **🔧 Cross-Platform**: Works on Windows, Linux, and macOS
+- **🔍 Full-Text Search**: Google-like search with TF-IDF ranking
+- **📝 SQL-like Queries**: Familiar SQL syntax for database operations
+- **✅ Data Validation**: Built-in validators for email, phone, URL, and more
+
+## 📦 Installation
+
+### From PyPI (Recommended)
+
+```bash
+pip install irotechlab-irodb
+```
+
+### From Source
+
+```bash
+# Clone the repository
+git clone https://github.com/IROTECHLAB/irodb.git
+
+# Navigate to the directory
+cd irodb
+
+# Install in development mode
+pip install -e .
+```
 
 ## 🚀 Quick Start
 
-```
-from irodb.core import IRODB
+```python
+from irodb import IRODB
 
 # Create or open a database
 db = IRODB('my_database.irodb', auto_create=True)
@@ -58,35 +84,14 @@ db.delete('users', {'active': False})
 db.close()
 ```
 
-## 📦 Installation
-
-### From Source
-
-```
-# Clone the repository
-git clone https://github.com/IROTECHLAB/irodb.git
-
-# Navigate to the directory
-cd irodb
-
-# Install in development mode
-pip install -e .
-```
-
-### Using pip
-
-```
-pip install irotechlab_irodb
-```
-
 ## 📚 Documentation
 
 ### Database Operations
 
 #### Creating a Database
 
-```
-from irodb.core import IRODB
+```python
+from irodb import IRODB
 
 # Auto-create if doesn't exist
 db = IRODB('data.irodb', auto_create=True)
@@ -97,7 +102,7 @@ db = IRODB('data.irodb', auto_create=False)
 
 #### Table Management
 
-```
+```python
 # Create a table with schema
 db.create_table('products', {
     'name': str,
@@ -116,11 +121,11 @@ db.create_table('users', {
 print(db.tables.keys())
 ```
 
-#### CRUD Operations
+### CRUD Operations
 
 **Insert Data**
 
-```
+```python
 # Insert single record
 row_id = db.insert('users', {
     'name': 'Bob',
@@ -140,7 +145,7 @@ row_id, row_hash = db.insert('users', {
 
 **Select/Query Data**
 
-```
+```python
 # Select all records
 all_users = db.select('users')
 
@@ -156,7 +161,7 @@ results = db.select('users', {'age': 30, 'active': True})
 
 **Update Data**
 
-```
+```python
 # Update single record
 updated = db.update('users', {'name': 'Bob'}, {'age': 26})
 
@@ -174,11 +179,80 @@ deleted = db.delete('users', {'name': 'Bob'})
 deleted = db.delete('users', {'active': False})
 ```
 
+### Full-Text Search
+
+```python
+from irodb import FullTextSearch
+
+# Create full-text index
+fulltext = FullTextSearch(db)
+fulltext.create_fulltext_index("products", ["name", "description"], "products_ft")
+
+# Search with ranking
+results = fulltext.search("products", "laptop professional", limit=5)
+for result in results:
+    print(f"{result['name']} (Score: {result['_score']:.2f})")
+
+# Field boosting
+results = fulltext.search("products", "python book", 
+                         boost={'name': 2.0, 'description': 1.0})
+```
+
+### SQL-like Queries
+
+```python
+from irodb import SQLParser
+
+sql = SQLParser(db)
+
+# SELECT with conditions
+results = sql.execute("SELECT * FROM products WHERE category = 'electronics'")
+
+# SELECT with ORDER BY and LIMIT
+results = sql.execute("SELECT name, price FROM products WHERE price > 500 ORDER BY price DESC LIMIT 10")
+
+# GROUP BY with aggregation
+results = sql.execute("SELECT category, COUNT(*) as count FROM products GROUP BY category")
+
+# INSERT
+sql.execute("INSERT INTO products (name, price, category) VALUES ('Tablet', 299.99, 'electronics')")
+
+# UPDATE
+sql.execute("UPDATE products SET price = 249.99 WHERE name = 'Tablet'")
+
+# DELETE
+sql.execute("DELETE FROM products WHERE name = 'Tablet'")
+```
+
+### Data Validation
+
+```python
+from irodb import DataValidator
+
+validator = DataValidator(db)
+
+# Add constraints
+validator.add_table_constraints("products", {
+    "name": {"required": True, "min_length": 2, "max_length": 100},
+    "price": {"required": True, "min": 0.0, "max": 999999.99},
+    "category": {"required": True, "allowed_values": ["electronics", "books", "clothing"]},
+    "email": {"validator": "email", "required": True},
+    "sku": {"unique": True, "pattern": r'^[A-Z]{3}-\d{4}$'}
+})
+
+# Validate before insert
+try:
+    validator.check_constraints_on_insert("products", product_data)
+    db.insert("products", product_data)
+except ValidationError as e:
+    print(f"Validation failed: {e}")
+```
+
 ### Hash Features
 
 #### Hash Generation
 
-```
+```python
 # Insert with hash generation
 row_id, row_hash = db.insert('users', {
     'name': 'Alice',
@@ -191,7 +265,7 @@ print(f"Record hash: {row_hash}")
 
 #### Find by Hash
 
-```
+```python
 # Find records by exact hash
 results = db.find_by_hash('users', row_hash)
 
@@ -201,7 +275,7 @@ results = db.find_by_hashed_value('users', 'Alice')
 
 #### Hash Integrity Verification
 
-```
+```python
 # Verify hash integrity of a table
 integrity = db.verify_hash_integrity('users')
 print(f"Total rows: {integrity['total_rows']}")
@@ -217,7 +291,7 @@ print(f"Unique hashes: {stats['unique_hashes']}")
 
 #### Multiple Tables
 
-```
+```python
 # Create multiple tables
 db.create_table('users', {'name': str, 'age': int})
 db.create_table('products', {'name': str, 'price': float})
@@ -231,14 +305,14 @@ db.insert('orders', {'user_id': 1, 'product_id': 1})
 
 #### Vacuum Operation
 
-```
+```python
 # Optimize database by removing deleted records
 db.vacuum()
 ```
 
 #### Database Info
 
-```
+```python
 # Get database information
 info = {
     'tables': len(db.tables),
@@ -250,48 +324,57 @@ print(info)
 
 ## 🏗️ Project Structure
 
-Based on the actual file structure:
-
 ```
 irodb/
 ├── README.md
 ├── setup.py
+├── pyproject.toml
 ├── LICENSE
 ├── .gitignore
 ├── irodb/
 │   ├── __init__.py          # Package initialization
-│   ├── core.py              # Core database engine (19.51KB)
-│   ├── constants.py         # Constants and configuration (1.09KB)
-│   ├── exceptions.py        # Custom exceptions (909.00B)
-│   ├── hash_system.py       # Hash-based features (8.49KB)
-│   ├── index.py             # Indexing system (3.56KB)
-│   ├── transaction.py       # Transaction management (3.99KB)
-│   └── utils.py             # Utility functions (4.67KB)
+│   ├── core.py              # Core database engine
+│   ├── constants.py         # Constants and configuration
+│   ├── exceptions.py        # Custom exceptions
+│   ├── hash_system.py       # Hash-based features
+│   ├── index.py             # Indexing system
+│   ├── transaction.py       # Transaction management
+│   ├── utils.py             # Utility functions
+│   ├── feature_fulltext.py  # Full-text search engine
+│   ├── feature_sql.py       # SQL-like query parser
+│   ├── feature_validation.py # Data validation system
+│   └── cli.py              # Command-line interface
 ├── tests/
-│   ├── __init__.py
-│   └── test_core.py
+│   ├── test_core.py
+│   └── test-all.py
 └── examples/
-    └── basic_usage.py
+    └── complete_example.py
 ```
 
 ### Module Descriptions
 
-| Module | Size | Description |
+| Module | Description |
 |--------|------|-------------|
-| **core.py** | 19.51KB | Main database engine with CRUD operations |
-| **hash_system.py** | 8.49KB | SHA-256 hashing and integrity verification |
-| **utils.py** | 4.67KB | Helper functions and utilities |
-| **transaction.py** | 3.99KB | ACID transaction support |
-| **index.py** | 3.56KB | Indexing and fast lookups |
-| **constants.py** | 1.09KB | Configuration constants |
-| **exceptions.py** | 909B | Custom exception classes |
-| **__init__.py** | 617B | Package exports |
+| **core.py** | Main database engine with CRUD operations |
+| **hash_system.py** | SHA-256 hashing and integrity verification |
+| **utils.py** | Helper functions and utilities |
+| **transaction.py** | ACID transaction support |
+| **index.py** | Indexing and fast lookups |
+| **feature_fulltext.py** | Full-text search with TF-IDF ranking |
+| **feature_sql.py** | SQL-like query parser and executor |
+| **feature_validation.py** | Data validation and constraints |
+| **constants.py**  | Configuration constants |
+| **exceptions.py** | Custom exception classes |
+| **cli.py** | Command-line interface |
 
 ## 🧪 Running Tests
 
-```
+```bash
 # Run all tests
 python tests/test_core.py
+
+# Run complete test suite
+python tests/test-all.py
 
 # Run specific test class
 python -m unittest tests.test_core.TestCRUDOperations
@@ -303,239 +386,83 @@ coverage report -m
 
 ## 📝 Examples
 
-### Basic Usage Example
+### Complete Example with All Features
 
-```
-from irodb.core import IRODB
+```python
+from irodb import IRODB, FullTextSearch, SQLParser, DataValidator
 
 # Initialize database
-db = IRODB('example.irodb', auto_create=True)
+db = IRODB('complete_example.irodb', auto_create=True)
 
 # Create table
-db.create_table('employees', {
+db.create_table('products', {
     'name': str,
-    'department': str,
-    'salary': int,
-    'active': bool
+    'price': float,
+    'category': str,
+    'description': str,
+    'email': str
 }, enable_hash_index=True)
 
-# Insert sample data
-employees = [
-    {'name': 'Alice', 'department': 'Engineering', 'salary': 80000, 'active': True},
-    {'name': 'Bob', 'department': 'Sales', 'salary': 60000, 'active': True},
-    {'name': 'Charlie', 'department': 'Engineering', 'salary': 90000, 'active': False}
-]
-
-for emp in employees:
-    db.insert('employees', emp)
-
-# Query active engineers
-active_engineers = db.select('employees', {
-    'department': 'Engineering',
-    'active': True
+# Setup validation
+validator = DataValidator(db)
+validator.add_table_constraints("products", {
+    "name": {"required": True, "min_length": 2},
+    "price": {"required": True, "min": 0},
+    "category": {"required": True, "allowed_values": ["electronics", "books", "clothing"]},
+    "email": {"validator": "email", "required": True}
 })
 
-print(f"Active engineers: {len(active_engineers)}")
+# Insert data
+db.insert("products", {
+    "name": "Laptop Pro",
+    "price": 1299.99,
+    "category": "electronics",
+    "description": "High-performance laptop",
+    "email": "laptop@store.com"
+})
 
-# Update employee salary
-db.update('employees', {'name': 'Alice'}, {'salary': 85000})
+# Full-text search
+fulltext = FullTextSearch(db)
+fulltext.create_fulltext_index("products", ["name", "description"], "products_ft")
+results = fulltext.search("products", "laptop high-performance")
+print(f"Search results: {len(results)}")
 
-# Verify hash integrity
-integrity = db.verify_hash_integrity('employees')
+# SQL query
+sql = SQLParser(db)
+results = sql.execute("SELECT name, price FROM products WHERE category = 'electronics'")
+print(f"SQL results: {len(results)}")
+
+# Hash integrity
+integrity = db.verify_hash_integrity("products")
 print(f"Hash integrity: {integrity['valid_hashes']}/{integrity['total_rows']}")
 
-# Close database
 db.close()
 ```
 
-### Hash Demo Example
+### CLI Usage
 
-```
-from irodb.core import IRODB
+```bash
+# Show database info
+irodb data.irodb --info
 
-# Create database with hash indexing
-db = IRODB('hash_demo.irodb', auto_create=True)
+# Execute SQL query
+irodb data.irodb --query "SELECT * FROM products WHERE price > 100"
 
-db.create_table('documents', {
-    'title': str,
-    'content': str,
-    'author': str
-}, enable_hash_index=True)
+# Export to JSON
+irodb data.irodb --export data.json
 
-# Insert documents with hash
-doc_id, doc_hash = db.insert('documents', {
-    'title': 'Introduction',
-    'content': 'This is the first document.',
-    'author': 'John Doe'
-}, return_hash=True)
+# Backup database
+irodb data.irodb --backup backup.irodb
 
-print(f"Document hash: {doc_hash}")
-
-# Find document by hash
-found = db.find_by_hash('documents', doc_hash)
-print(f"Found: {found[0]['title']}")
-
-# Check integrity
-integrity = db.verify_hash_integrity('documents')
-print(f"Integrity check: {integrity}")
-
-db.close()
-```
-
-### Transaction Example
-
-```
-from irodb.core import IRODB
-from irodb.transaction import Transaction
-
-db = IRODB('data.irodb', auto_create=True)
-
-# Start a transaction
-with Transaction(db) as tx:
-    tx.insert('users', {'name': 'Alice', 'age': 30})
-    tx.insert('users', {'name': 'Bob', 'age': 25})
-    # Auto-commit on exit
-
-# Manual transaction
-tx = Transaction(db)
-try:
-    tx.insert('users', {'name': 'Charlie', 'age': 35})
-    tx.commit()
-except Exception as e:
-    tx.rollback()
-    print(f"Transaction failed: {e}")
-```
-
-### Test Suite Example
-
-```
-# tests/test_core.py
-import unittest
-import os
-import tempfile
-import sys
-import pickle
-
-# Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from irodb.core import IRODB
-from irodb.exceptions import *
-
-class TestDatabaseCreation(unittest.TestCase):
-    """Test database creation and initialization"""
-    
-    def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
-        self.db_path = os.path.join(self.temp_dir, 'test.irodb')
-    
-    def tearDown(self):
-        try:
-            if os.path.exists(self.db_path):
-                os.remove(self.db_path)
-        except:
-            pass
-        try:
-            os.rmdir(self.temp_dir)
-        except:
-            pass
-    
-    def test_create_new_database(self):
-        """Test creating a new database"""
-        db = IRODB(self.db_path, auto_create=True)
-        self.assertTrue(os.path.exists(self.db_path))
-        self.assertEqual(len(db.tables), 0)
-        db.close()
-
-class TestCRUDOperations(unittest.TestCase):
-    """Test basic CRUD operations"""
-    
-    def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
-        self.db_path = os.path.join(self.temp_dir, 'test.irodb')
-        self.db = IRODB(self.db_path, auto_create=True)
-        self.db.create_table("users", {
-            "name": str,
-            "age": int,
-            "email": str,
-            "active": bool
-        })
-    
-    def tearDown(self):
-        self.db.close()
-        try:
-            os.remove(self.db_path)
-        except:
-            pass
-        try:
-            os.rmdir(self.temp_dir)
-        except:
-            pass
-    
-    def test_insert_single_row(self):
-        """Test inserting a single row"""
-        row_id = self.db.insert("users", {
-            "name": "Alice",
-            "age": 30,
-            "email": "alice@example.com",
-            "active": True
-        })
-        self.assertEqual(row_id, 1)
-        
-        # Verify
-        results = self.db.select("users")
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0]["name"], "Alice")
-
-class TestHashFeatures(unittest.TestCase):
-    """Test hash-based features"""
-    
-    def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
-        self.db_path = os.path.join(self.temp_dir, 'test_hash.irodb')
-        self.db = IRODB(self.db_path, auto_create=True)
-        self.db.create_table("users", {
-            "name": str,
-            "age": int,
-            "email": str
-        }, enable_hash_index=True)
-    
-    def tearDown(self):
-        self.db.close()
-        try:
-            os.remove(self.db_path)
-        except:
-            pass
-        try:
-            os.rmdir(self.temp_dir)
-        except:
-            pass
-    
-    def test_insert_with_hash_generation(self):
-        """Test hash generation on insert"""
-        row_id, row_hash = self.db.insert("users", {
-            "name": "Alice",
-            "age": 30,
-            "email": "alice@example.com"
-        }, return_hash=True)
-        
-        self.assertEqual(row_id, 1)
-        self.assertIsNotNone(row_hash)
-        self.assertEqual(len(row_hash), 64)  # SHA-256 hex length
-        
-        # Verify hash is stored
-        results = self.db.select("users", {"name": "Alice"})
-        self.assertEqual(results[0]["hash"], row_hash)
-
-if __name__ == "__main__":
-    unittest.main()
+# Interactive mode
+irodb data.irodb --interactive
 ```
 
 ## ⚠️ Error Handling
 
 ### Common Exceptions
 
-```
+```python
 from irodb.exceptions import *
 
 try:
@@ -552,33 +479,46 @@ try:
     db.insert('users', {'name': 'Alice', 'age': 'thirty'})  # Wrong type
 except TypeError as e:
     print(f"Type error: {e}")
+
+try:
+    db.insert('products', invalid_data)
+except ValidationError as e:
+    print(f"Validation failed: {e}")
+except ConstraintError as e:
+    print(f"Constraint violation: {e}")
 ```
 
 ## 🔧 Configuration
 
 ### Database Settings
 
-```
+```python
 # Database options
 db = IRODB(
     'data.irodb',
     auto_create=True,
-    page_size=4096,  # Custom page size
-    hash_algorithm='sha256'  # Hash algorithm
+    page_size=4096  # Custom page size
 )
 ```
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+IRODB is an open-source project and contributions are welcome! Whether you want to report a bug, suggest a feature, or submit a pull request, we appreciate your help.
+
+### How to Contribute
+
+1. **Fork the repository** on GitHub
+2. **Create a feature branch**:
+   ```git checkout -b feature/amazing-feature```
+3. **Commit your changes**:
+   ```git commit -m 'Add amazing feature'```
+4. **Push to the branch**:
+   ```git push origin feature/amazing-feature```
+5. **Open a Pull Request**
 
 ### Development Setup
 
-```
+```bash
 # Clone your fork
 git clone https://github.com/IROTECHLAB/irodb.git
 
@@ -592,6 +532,23 @@ pytest tests/
 black irodb/
 flake8 irodb/
 ```
+
+## 📞 Contact & Support
+
+### Found a Bug or Have a Question?
+
+If you find any issues or have questions, feel free to reach out:
+
+- **📱 Instagram**: [@ironmanyt00](https://instagram.com/ironmanyt00)
+- **🐦 Twitter (X)**: [@irotechlab](https://twitter.com/irotechlab)
+- **📨 Telegram**: [@ironmanhindigaming](https://t.me/ironmanhindigaming)
+- **📧 Telegram Channel**: [@irotechcoders](https://t.me/irotechcoders)
+- **🐙 GitHub**: [IROTECHLAB/irodb](https://github.com/IROTECHLAB/irodb)
+
+### Issues and Pull Requests
+
+- **Report Issues**: [GitHub Issues](https://github.com/IROTECHLAB/irodb/issues)
+- **Submit PRs**: [GitHub Pull Requests](https://github.com/IROTECHLAB/irodb/pulls)
 
 ## 📄 License
 
@@ -607,22 +564,33 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Inspired by simplicity and data integrity
 - Community contributions welcome
 
-## 📞 Contact
+## 📦 PyPI Package Information
 
-- **Telegram Channel**: [@irotechcoders](https://t.me/irotechcoders)
-- **Author**: [@ironmanhindigaming](https://t.me/ironmanhindigaming)
-- **GitHub**: [IROTECHLAB/irodb](https://github.com/IROTECHLAB/irodb)
+- **Package Name**: `irotechlab-irodb`
+- **Total Downloads**: Growing daily
+- **PyPI Link**: [https://pypi.org/project/irotechlab-irodb/](https://pypi.org/project/irotechlab-irodb/)
 
-## 🔮 Roadmap
+### Install from PyPI
 
-- [ ] SQL-like query support
-- [ ] Encryption at rest
-- [ ] Replication support
-- [ ] Backup and restore utilities
-- [ ] Web admin interface
-- [ ] Migration tools
-- [ ] Performance optimizations
+```bash
+pip install irotechlab-irodb
+```
 
+### Upgrade
+
+```bash
+pip install --upgrade irotechlab-irodb
+```
+
+### Verify Installation
+
+```bash
+python -c "import irodb; print(irodb.__version__)"
+```
 ---
 
 Made with ❤️ by **IROTECHLAB**
+
+[![Star on GitHub](https://img.shields.io/github/stars/IROTECHLAB/irodb.svg)](https://github.com/IROTECHLAB/irodb)
+[![Fork on GitHub](https://img.shields.io/github/forks/IROTECHLAB/irodb.svg)](https://github.com/IROTECHLAB/irodb)
+[![Issues](https://img.shields.io/github/issues/IROTECHLAB/irodb.svg)](https://github.com/IROTECHLAB/irodb/issues)
