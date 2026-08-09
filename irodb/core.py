@@ -1,4 +1,7 @@
-# irodb/core.py - Complete Fixed Version
+"""
+Core database implementation for IRODB
+"""
+
 import os
 import struct
 import pickle
@@ -9,156 +12,7 @@ import hashlib
 
 from .constants import *
 from .exceptions import *
-
-class HashManager:
-    """Manages hash operations"""
-    
-    def __init__(self, db):
-        self.db = db
-        self.hash_indexes = {}
-    
-    def calculate_hash(self, data: Any) -> str:
-        """Calculate SHA-256 hash of data"""
-        try:
-            if isinstance(data, (dict, list)):
-                data = json.dumps(data, sort_keys=True).encode()
-            elif isinstance(data, str):
-                data = data.encode('utf-8')
-            elif isinstance(data, (int, float, bool)):
-                data = str(data).encode('utf-8')
-            elif not isinstance(data, bytes):
-                data = str(data).encode('utf-8')
-            
-            return hashlib.sha256(data).hexdigest()
-        except Exception as e:
-            raise HashError(f"Failed to calculate hash: {e}")
-    
-    def calculate_row_hash(self, row: Dict[str, Any]) -> str:
-        """Calculate hash for a row"""
-        row_copy = {k: v for k, v in row.items() if k not in ['id', 'hash', '_metadata']}
-        return self.calculate_hash(row_copy)
-    
-    def find_by_hash(self, table_name: str, hash_value: str,
-                    exact_match: bool = True) -> List[Dict[str, Any]]:
-        """Find rows by hash"""
-        table_info = self.db.tables.get(table_name)
-        if not table_info:
-            return []
-        
-        # Use hash index if available
-        if exact_match and table_info.get('enable_hash_index', False):
-            hash_page = table_info.get('hash_index_page')
-            if hash_page:
-                try:
-                    hash_index = pickle.loads(self.db._read_page(hash_page))
-                    if hash_value in hash_index:
-                        row_ids = hash_index[hash_value]
-                        return self._get_rows_by_ids(table_name, row_ids)
-                except:
-                    pass
-                return []
-        
-        # Fallback to full scan
-        try:
-            table_data = pickle.loads(self.db._read_page(table_info['page']))
-            results = []
-            
-            for row in table_data['rows']:
-                row_hash = row.get('hash', '')
-                if exact_match:
-                    if row_hash == hash_value:
-                        results.append(row.copy())
-                else:
-                    if row_hash.startswith(hash_value):
-                        results.append(row.copy())
-            
-            return results
-        except:
-            return []
-    
-    def _get_rows_by_ids(self, table_name: str, row_ids: List[int]) -> List[Dict[str, Any]]:
-        """Get rows by IDs"""
-        try:
-            table_data = pickle.loads(self.db._read_page(self.db.tables[table_name]['page']))
-            id_set = set(row_ids)
-            return [row.copy() for row in table_data['rows'] if row['id'] in id_set]
-        except:
-            return []
-    
-    def find_by_hashed_value(self, table_name: str, value: Any) -> List[Dict[str, Any]]:
-        """Find rows by hashing a value"""
-        hash_val = self.calculate_hash(value)
-        return self.find_by_hash(table_name, hash_val)
-    
-    def find_by_hash_and_column(self, table_name: str, hash_value: str,
-                               column: str, value: Any) -> List[Dict[str, Any]]:
-        """Find by hash and column filter"""
-        rows = self.find_by_hash(table_name, hash_value)
-        return [row for row in rows if row.get(column) == value]
-    
-    def verify_hash_integrity(self, table_name: str) -> Dict[str, Any]:
-        """Verify all hashes in a table"""
-        table_info = self.db.tables.get(table_name)
-        if not table_info:
-            raise ValueError(f"Table {table_name} does not exist")
-        
-        try:
-            table_data = pickle.loads(self.db._read_page(table_info['page']))
-        except:
-            return {'error': 'Failed to read table data'}
-        
-        results = {
-            'total_rows': len(table_data['rows']),
-            'valid_hashes': 0,
-            'invalid_hashes': 0,
-            'corrupted_rows': [],
-            'verified_at': datetime.now().isoformat()
-        }
-        
-        for row in table_data['rows']:
-            stored_hash = row.get('hash', '')
-            computed_hash = self.calculate_row_hash(row)
-            
-            if stored_hash == computed_hash:
-                results['valid_hashes'] += 1
-            else:
-                results['invalid_hashes'] += 1
-                results['corrupted_rows'].append({
-                    'id': row['id'],
-                    'stored_hash': stored_hash,
-                    'computed_hash': computed_hash
-                })
-        
-        return results
-    
-    def get_hash_statistics(self, table_name: str) -> Dict[str, Any]:
-        """Get hash statistics"""
-        table_info = self.db.tables.get(table_name)
-        if not table_info:
-            raise ValueError(f"Table {table_name} does not exist")
-        
-        try:
-            table_data = pickle.loads(self.db._read_page(table_info['page']))
-        except:
-            return {'error': 'Failed to read table data'}
-        
-        hash_distribution = {}
-        for row in table_data['rows']:
-            hash_val = row.get('hash', '')
-            if hash_val:
-                if hash_val not in hash_distribution:
-                    hash_distribution[hash_val] = []
-                hash_distribution[hash_val].append(row['id'])
-        
-        duplicate_hashes = {k: v for k, v in hash_distribution.items() if len(v) > 1}
-        
-        return {
-            'total_rows': len(table_data['rows']),
-            'unique_hashes': len(hash_distribution),
-            'duplicate_hash_count': len(duplicate_hashes),
-            'duplicate_hashes': duplicate_hashes,
-            'hash_collision_rate': (len(table_data['rows']) - len(hash_distribution)) / max(len(table_data['rows']), 1)
-        }
+from .hash_system import HashManager
 
 class IRODB:
     """Main database class"""
@@ -168,6 +22,8 @@ class IRODB:
         self.tables = {}
         self.page_cache = {}
         self.hash_manager = HashManager(self)
+        self.metadata = {}
+        self.constraints = {}
         
         if not os.path.exists(db_path):
             if auto_create:
@@ -198,7 +54,8 @@ class IRODB:
                 'hash_indexes': {},
                 'next_page': 2,
                 'created_at': datetime.now().isoformat(),
-                'version': VERSION
+                'version': VERSION,
+                'constraints': {}
             }
             self._write_page(1, pickle.dumps(metadata))
         
@@ -211,7 +68,6 @@ class IRODB:
             with open(self.db_path, 'rb') as f:
                 header = f.read(5)
                 if header != MAGIC_HEADER:
-                    # Try to create new database if corrupted
                     self._create_empty_db()
                     return
                 
@@ -221,6 +77,8 @@ class IRODB:
                 
                 metadata = pickle.loads(self._read_page(1))
                 self.tables = metadata.get('tables', {})
+                self.metadata = metadata
+                self.constraints = metadata.get('constraints', {})
         except Exception as e:
             # If loading fails, recreate the database
             self._create_empty_db()
@@ -234,27 +92,44 @@ class IRODB:
             with open(self.db_path, 'rb') as f:
                 f.seek(page_num * PAGE_SIZE)
                 data = f.read(PAGE_SIZE)
-                if not data:
-                    raise PageError(f"Page {page_num} not found")
+                if len(data) == 0:
+                    # Page doesn't exist, return empty page
+                    data = b'\x00' * PAGE_SIZE
                 self.page_cache[page_num] = data
                 return data
         except Exception as e:
-            raise PageError(f"Failed to read page {page_num}: {e}")
+            # Return empty page on error
+            return b'\x00' * PAGE_SIZE
     
     def _write_page(self, page_num: int, data: bytes):
         """Write a page to disk"""
         try:
             if len(data) < PAGE_SIZE:
-                data += b'\x00' * (PAGE_SIZE - len(data))
+                data = data.ljust(PAGE_SIZE, b'\x00')
             elif len(data) > PAGE_SIZE:
                 data = data[:PAGE_SIZE]
             
             # Ensure directory exists
             os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
             
-            with open(self.db_path, 'r+b') as f:
-                f.seek(page_num * PAGE_SIZE)
-                f.write(data)
+            # Open in correct mode
+            if os.path.exists(self.db_path):
+                with open(self.db_path, 'r+b') as f:
+                    f.seek(page_num * PAGE_SIZE)
+                    f.write(data)
+            else:
+                with open(self.db_path, 'wb') as f:
+                    # Write header first
+                    f.write(MAGIC_HEADER)
+                    f.write(struct.pack('<H', VERSION))
+                    f.write(struct.pack('<Q', 0))
+                    f.write(struct.pack('<Q', 0))
+                    f.write(struct.pack('<Q', 1))
+                    f.write(b'\x00' * (PAGE_SIZE - 31))
+                    
+                    # Then seek to page position
+                    f.seek(page_num * PAGE_SIZE)
+                    f.write(data)
             
             self.page_cache[page_num] = data
         except Exception as e:
@@ -264,15 +139,18 @@ class IRODB:
         """Get next available page"""
         max_page = 1
         for table in self.tables.values():
-            # Get table page
             page = table.get('page', 0)
             if page and page > max_page:
                 max_page = page
             
-            # Get hash index page
             hash_page = table.get('hash_index_page')
             if hash_page and hash_page > max_page:
                 max_page = hash_page
+        
+        # Check if we have any pages stored
+        if hasattr(self, 'metadata') and self.metadata:
+            next_page = self.metadata.get('next_page', max_page + 1)
+            return max(next_page, max_page + 1)
         
         return max_page + 1
     
@@ -284,9 +162,11 @@ class IRODB:
             'hash_indexes': self.hash_manager.hash_indexes,
             'next_page': self._get_next_page(),
             'created_at': datetime.now().isoformat(),
-            'version': VERSION
+            'version': VERSION,
+            'constraints': getattr(self, 'constraints', {})
         }
         self._write_page(1, pickle.dumps(metadata))
+        self.metadata = metadata
     
     def create_table(self, table_name: str, schema: Dict[str, type],
                     enable_hash_index: bool = False):
@@ -336,10 +216,14 @@ class IRODB:
                 raise TypeError(f"Field {field} must be of type {field_type.__name__}")
         
         # Load table data
-        table_data = pickle.loads(self._read_page(table_info['page']))
+        try:
+            page_data = self._read_page(table_info['page'])
+            table_data = pickle.loads(page_data)
+        except:
+            table_data = {'rows': [], 'auto_increment': 0}
         
         # Assign row ID
-        row_id = table_data['auto_increment'] + 1
+        row_id = table_data.get('auto_increment', 0) + 1
         table_data['auto_increment'] = row_id
         
         # Create row with hash
@@ -348,15 +232,17 @@ class IRODB:
         row['hash'] = row_hash
         
         # Add row
+        if 'rows' not in table_data:
+            table_data['rows'] = []
         table_data['rows'].append(row)
-        table_info['rows'] = table_data['rows']
         
         # Update hash index
         if table_info.get('enable_hash_index', False):
             hash_page = table_info.get('hash_index_page')
             if hash_page:
                 try:
-                    hash_index = pickle.loads(self._read_page(hash_page))
+                    hash_data = self._read_page(hash_page)
+                    hash_index = pickle.loads(hash_data) if hash_data and len(hash_data) > 0 else {}
                     if row_hash not in hash_index:
                         hash_index[row_hash] = []
                     if row_id not in hash_index[row_hash]:
@@ -380,8 +266,13 @@ class IRODB:
         if use_hash and conditions and 'hash' in conditions:
             return self.hash_manager.find_by_hash(table_name, conditions['hash'])
         
-        table_data = pickle.loads(self._read_page(self.tables[table_name]['page']))
-        rows = table_data['rows']
+        try:
+            page_data = self._read_page(self.tables[table_name]['page'])
+            table_data = pickle.loads(page_data)
+        except:
+            return []
+        
+        rows = table_data.get('rows', [])
         
         if not conditions:
             return rows[:limit] if limit else rows.copy()
@@ -403,7 +294,12 @@ class IRODB:
         
         table_info = self.tables[table_name]
         schema = table_info['schema']
-        table_data = pickle.loads(self._read_page(table_info['page']))
+        
+        try:
+            page_data = self._read_page(table_info['page'])
+            table_data = pickle.loads(page_data)
+        except:
+            return 0
         
         # Validate updates
         for field in updates:
@@ -411,14 +307,14 @@ class IRODB:
                 raise ValueError(f"Invalid field: {field}")
         
         updated_count = 0
-        for row in table_data['rows']:
+        for row in table_data.get('rows', []):
             if all(row.get(k) == v for k, v in conditions.items()):
                 # Update fields
                 for key, value in updates.items():
                     row[key] = value
                 
                 # Recalculate hash
-                old_hash = row['hash']
+                old_hash = row.get('hash', '')
                 new_hash = self.hash_manager.calculate_row_hash(row)
                 row['hash'] = new_hash
                 
@@ -427,15 +323,14 @@ class IRODB:
                     hash_page = table_info.get('hash_index_page')
                     if hash_page:
                         try:
-                            hash_index = pickle.loads(self._read_page(hash_page))
+                            hash_data = self._read_page(hash_page)
+                            hash_index = pickle.loads(hash_data) if hash_data and len(hash_data) > 0 else {}
                             
-                            # Remove from old hash
                             if old_hash in hash_index:
                                 hash_index[old_hash] = [id for id in hash_index[old_hash] if id != row['id']]
                                 if not hash_index[old_hash]:
                                     del hash_index[old_hash]
                             
-                            # Add to new hash
                             if new_hash not in hash_index:
                                 hash_index[new_hash] = []
                             if row['id'] not in hash_index[new_hash]:
@@ -459,20 +354,26 @@ class IRODB:
             raise TableError(f"Table {table_name} does not exist")
         
         table_info = self.tables[table_name]
-        table_data = pickle.loads(self._read_page(table_info['page']))
+        
+        try:
+            page_data = self._read_page(table_info['page'])
+            table_data = pickle.loads(page_data)
+        except:
+            return 0
         
         deleted_count = 0
         remaining_rows = []
         
-        for row in table_data['rows']:
+        for row in table_data.get('rows', []):
             if all(row.get(k) == v for k, v in conditions.items()):
                 # Update hash index
                 if table_info.get('enable_hash_index', False):
                     hash_page = table_info.get('hash_index_page')
                     if hash_page:
                         try:
-                            hash_index = pickle.loads(self._read_page(hash_page))
-                            if row['hash'] in hash_index:
+                            hash_data = self._read_page(hash_page)
+                            hash_index = pickle.loads(hash_data) if hash_data and len(hash_data) > 0 else {}
+                            if row.get('hash') in hash_index:
                                 hash_index[row['hash']] = [id for id in hash_index[row['hash']] if id != row['id']]
                                 if not hash_index[row['hash']]:
                                     del hash_index[row['hash']]
@@ -509,8 +410,12 @@ class IRODB:
     def vacuum(self):
         """Optimize database"""
         for table_name, table_info in self.tables.items():
-            table_data = pickle.loads(self._read_page(table_info['page']))
-            self._write_page(table_info['page'], pickle.dumps(table_data))
+            try:
+                page_data = self._read_page(table_info['page'])
+                table_data = pickle.loads(page_data)
+                self._write_page(table_info['page'], pickle.dumps(table_data))
+            except:
+                pass
         
         self.page_cache.clear()
     

@@ -5,6 +5,7 @@ Utility functions for IRODB
 import os
 import shutil
 import json
+import pickle
 from typing import Any, Dict, List
 from datetime import datetime
 
@@ -76,7 +77,6 @@ class DatabaseUtils:
             data = json.load(f)
         
         for table_name, table_data in data['tables'].items():
-            # Create table
             schema = {}
             for field_name, field_type in table_data['schema'].items():
                 if field_type == 'str':
@@ -96,7 +96,6 @@ class DatabaseUtils:
                 enable_hash_index=table_data.get('hash_index_enabled', False)
             )
             
-            # Insert rows
             for row in table_data['rows']:
                 row_data = {k: v for k, v in row.items() if k not in ['id', 'hash']}
                 self.db.insert(table_name, row_data)
