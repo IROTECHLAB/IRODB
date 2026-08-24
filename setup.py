@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 # Read version from __init__.py
 with open("irodb/__init__.py", "r", encoding="utf-8") as f:
     version_match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', f.read())
-    version = version_match.group(1) if version_match else "0.2.0"
+    version = version_match.group(1) if version_match else "0.3.0"
 
 # Read README
 try:
@@ -29,7 +29,6 @@ setup(
     packages=find_packages(include=['irodb', 'irodb.*']),
     classifiers=[
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
@@ -43,9 +42,10 @@ setup(
         "Topic :: Database :: Database Engines/Servers",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    python_requires=">=3.6",
-    install_requires=[],
+    python_requires=">=3.7",
+    install_requires=["pycryptodome>=3.20"],
     extras_require={
+        "legacy-crypto": ["cryptography>=42.0"],
         "dev": [
             "pytest>=7.0.0",
             "pytest-cov>=4.0.0",

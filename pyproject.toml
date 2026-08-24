@@ -4,17 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "irotechlab_irodb"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Python database library with .irodb format and hash-based indexing"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.7"
 authors = [
     {name = "IroTechLab"},
 ]
 license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.6",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -29,7 +28,9 @@ classifiers = [
     "Topic :: Database :: Database Engines/Servers",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = []
+dependencies = [
+    "pycryptodome>=3.20",
+]
 
 [project.urls]
 Homepage = "https://github.com/IroTechLab/irodb"
@@ -41,6 +42,9 @@ Telegram = "https://t.me/ironmanhindigaming"
 irodb = "irodb.cli:main"
 
 [project.optional-dependencies]
+legacy-crypto = [
+    "cryptography>=42.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
