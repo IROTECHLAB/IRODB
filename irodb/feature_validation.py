@@ -3,7 +3,7 @@ Data Validation & Constraints System for IRODB
 """
 
 import re
-import pickle
+from . import binary_codec as codec
 from typing import Dict, List, Any, Optional, Callable
 from datetime import datetime
 
@@ -160,7 +160,7 @@ class DataValidator:
         # Check for duplicates
         try:
             page_data = self.db._read_page(self.db.tables[table_name]['page'])
-            table_data = pickle.loads(page_data)
+            table_data = codec.loads(page_data)
         except:
             return True
         
@@ -202,7 +202,7 @@ class DataValidator:
                 
                 # Check if referenced value exists
                 try:
-                    fk_data = pickle.loads(self.db._read_page(self.db.tables[fk_table]['page']))
+                    fk_data = codec.loads(self.db._read_page(self.db.tables[fk_table]['page']))
                     exists = any(existing_row.get(fk_field) == row[field] for existing_row in fk_data.get('rows', []))
                 except:
                     exists = False

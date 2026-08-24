@@ -2,7 +2,7 @@
 Index management for IRODB
 """
 
-import pickle
+from . import binary_codec as codec
 import json
 from typing import Any, Dict, List, Optional
 from collections import defaultdict
@@ -26,7 +26,7 @@ class IndexManager:
             raise IndexError(f"Index {index_name} already exists")
         
         table_info = self.db.tables[table_name]
-        table_data = pickle.loads(self.db._read_page(table_info['page']))
+        table_data = codec.loads(self.db._read_page(table_info['page']))
         
         # Build index
         index_data = {}
@@ -46,7 +46,7 @@ class IndexManager:
         }
         
         # Store index data
-        self.db._write_page(self.indexes[index_name]['page'], pickle.dumps(index_data))
+        self.db._write_page(self.indexes[index_name]['page'], codec.dumps(index_data))
         self.db._save_metadata()
     
     def drop_index(self, index_name: str):
@@ -69,7 +69,7 @@ class IndexManager:
             raise IndexError(f"Table {table_name} does not exist")
         
         # Load index data
-        index_data = pickle.loads(self.db._read_page(index_info['page']))
+        index_data = codec.loads(self.db._read_page(index_info['page']))
         
         if value not in index_data:
             return []
@@ -79,7 +79,7 @@ class IndexManager:
     
     def _get_rows_by_ids(self, table_name: str, row_ids: List[int]) -> List[Dict[str, Any]]:
         """Get rows by IDs"""
-        table_data = pickle.loads(self.db._read_page(self.db.tables[table_name]['page']))
+        table_data = codec.loads(self.db._read_page(self.db.tables[table_name]['page']))
         id_set = set(row_ids)
         return [row.copy() for row in table_data['rows'] if row['id'] in id_set]
     
@@ -89,7 +89,7 @@ class IndexManager:
             raise IndexError(f"Index {index_name} does not exist")
         
         index_info = self.indexes[index_name]
-        index_data = pickle.loads(self.db._read_page(index_info['page']))
+        index_data = codec.loads(self.db._read_page(index_info['page']))
         
         unique_values = len(index_data)
         total_entries = sum(len(ids) for ids in index_data.values())
@@ -101,5 +101,5 @@ class IndexManager:
             'type': index_info['type'],
             'unique_values': unique_values,
             'total_entries': total_entries,
-            'size': len(pickle.dumps(index_data))
+            'size': len(codec.dumps(index_data))
         }

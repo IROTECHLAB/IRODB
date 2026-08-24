@@ -39,11 +39,16 @@ except ImportError:
     SQLParser = None
 
 try:
+    from .feature_query import IRODBQuery
+except ImportError:
+    IRODBQuery = None
+
+try:
     from .feature_validation import DataValidator
 except ImportError:
     DataValidator = None
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     'IRODB',
     'HashManager',
@@ -52,6 +57,7 @@ __all__ = [
     'DatabaseUtils',
     'FullTextSearch',
     'SQLParser',
+    'IRODBQuery',
     'DataValidator',
     'IRODBError',
     'HashError',

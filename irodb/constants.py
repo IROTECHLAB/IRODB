@@ -5,7 +5,9 @@ Constants used throughout the IRODB system
 # Database format constants
 MAGIC_HEADER = b'IRODB'
 VERSION = 1
-PAGE_SIZE = 4096
+# 1 MiB fixed pages retain the existing page-addressing model while avoiding
+# silent truncation for normal table/index workloads.
+PAGE_SIZE = 1024 * 1024
 MAX_PAGES = 2**32 - 1
 MAX_TABLES = 1000
 MAX_INDEXES = 100

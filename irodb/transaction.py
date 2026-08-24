@@ -2,7 +2,7 @@
 Transaction management for IRODB
 """
 
-import pickle
+from . import binary_codec as codec
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional

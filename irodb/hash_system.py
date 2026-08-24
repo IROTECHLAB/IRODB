@@ -3,8 +3,7 @@ Hash management system for IRODB
 """
 
 import hashlib
-import json
-import pickle
+from . import binary_codec as codec
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
 
@@ -21,8 +20,8 @@ class HashManager:
     def calculate_hash(self, data: Any) -> str:
         """Calculate SHA-256 hash of data"""
         try:
-            if isinstance(data, (dict, list)):
-                data = json.dumps(data, sort_keys=True).encode()
+            if isinstance(data, (dict, list, tuple)):
+                data = codec.dumps(data)
             elif isinstance(data, str):
                 data = data.encode('utf-8')
             elif isinstance(data, (int, float, bool)):
@@ -51,7 +50,7 @@ class HashManager:
             hash_page = table_info.get('hash_index_page')
             if hash_page:
                 try:
-                    hash_index = pickle.loads(self.db._read_page(hash_page))
+                    hash_index = codec.loads(self.db._read_page(hash_page))
                     if hash_value in hash_index:
                         row_ids = hash_index[hash_value]
                         return self._get_rows_by_ids(table_name, row_ids)
@@ -61,7 +60,7 @@ class HashManager:
         
         # Fallback to full scan
         try:
-            table_data = pickle.loads(self.db._read_page(table_info['page']))
+            table_data = codec.loads(self.db._read_page(table_info['page']))
             results = []
             
             for row in table_data['rows']:
@@ -80,16 +79,25 @@ class HashManager:
     def _get_rows_by_ids(self, table_name: str, row_ids: List[int]) -> List[Dict[str, Any]]:
         """Get rows by IDs"""
         try:
-            table_data = pickle.loads(self.db._read_page(self.db.tables[table_name]['page']))
+            table_data = codec.loads(self.db._read_page(self.db.tables[table_name]['page']))
             id_set = set(row_ids)
             return [row.copy() for row in table_data['rows'] if row['id'] in id_set]
         except:
             return []
     
     def find_by_hashed_value(self, table_name: str, value: Any) -> List[Dict[str, Any]]:
-        """Find rows by hashing a value"""
-        hash_val = self.calculate_hash(value)
-        return self.find_by_hash(table_name, hash_val)
+        """Find rows containing a field whose value hashes to ``value``."""
+        table_info = self.db.tables.get(table_name)
+        if not table_info:
+            return []
+        try:
+            table_data = codec.loads(self.db._read_page(table_info['page']))
+        except Exception:
+            return []
+        wanted = self.calculate_hash(value)
+        return [row.copy() for row in table_data.get('rows', [])
+                if any(self.calculate_hash(field_value) == wanted
+                       for key, field_value in row.items() if key not in ('id', 'hash'))]
     
     def find_by_hash_and_column(self, table_name: str, hash_value: str,
                                column: str, value: Any) -> List[Dict[str, Any]]:
@@ -104,7 +112,7 @@ class HashManager:
             raise ValueError(f"Table {table_name} does not exist")
         
         try:
-            table_data = pickle.loads(self.db._read_page(table_info['page']))
+            table_data = codec.loads(self.db._read_page(table_info['page']))
         except:
             return {'error': 'Failed to read table data'}
         
@@ -139,7 +147,7 @@ class HashManager:
             raise ValueError(f"Table {table_name} does not exist")
         
         try:
-            table_data = pickle.loads(self.db._read_page(table_info['page']))
+            table_data = codec.loads(self.db._read_page(table_info['page']))
         except:
             return {'error': 'Failed to read table data'}
         

@@ -7,7 +7,7 @@ import json
 from typing import List, Dict, Any, Optional, Union, Tuple
 from datetime import datetime
 
-from .exceptions import SQLError
+from .exceptions import SQLError, IRODBError
 
 class SQLParser:
     """SQL-like query parser and executor"""
@@ -40,8 +40,12 @@ class SQLParser:
                 return self._parse_drop(query)
             else:
                 raise SQLError(f"Unsupported SQL statement: {query[:50]}...")
+        except SQLError:
+            raise
+        except IRODBError as e:
+            raise SQLError(str(e)) from e
         except Exception as e:
-            raise SQLError(f"Error executing query: {e}")
+            raise SQLError(f"Unexpected SQL error: {e}") from e
     
     def _parse_select(self, query: str) -> List[Dict[str, Any]]:
         """Parse SELECT query"""
@@ -92,13 +96,13 @@ class SQLParser:
             rest = rest.replace(limit_match.group(0), '').strip()
         
         # Parse GROUP BY
-        group_match = re.search(r'GROUP\s+BY\s+(.+?)(?:\s+(HAVING|LIMIT|$))', rest, re.IGNORECASE)
+        group_match = re.search(r'GROUP\s+BY\s+(.+?)(?:\s+(HAVING|LIMIT)\b|$)', rest, re.IGNORECASE)
         if group_match:
             group_by = group_match.group(1).strip()
             rest = rest.replace(group_match.group(0), '').strip()
         
         # Parse HAVING
-        having_match = re.search(r'HAVING\s+(.+?)(?:\s+(LIMIT|$))', rest, re.IGNORECASE)
+        having_match = re.search(r'HAVING\s+(.+?)(?:\s+(LIMIT)\b|$)', rest, re.IGNORECASE)
         if having_match:
             having = having_match.group(1).strip()
         
@@ -129,13 +133,13 @@ class SQLParser:
                 selected_row = {}
                 for col in columns:
                     if col.lower() == 'count(*)':
-                        selected_row['count(*)'] = len(rows)
+                        selected_row['count(*)'] = len(row.get('_rows', rows))
                     elif col in row:
                         selected_row[col] = row[col]
                     else:
                         # Handle aggregation functions
                         if '(' in col and ')' in col:
-                            selected_row[col] = self._apply_aggregation(rows, col)
+                            selected_row[col] = self._apply_aggregation(row.get('_rows', rows), col)
                 result.append(selected_row)
             return result
         
@@ -158,7 +162,11 @@ class SQLParser:
         
         data = {}
         for col, val in zip(columns, values):
-            data[col] = self._parse_literal(val)
+            parsed = self._parse_literal(val)
+            schema_type = self.db.tables.get(table_name, {}).get('schema', {}).get(col)
+            if schema_type is float and isinstance(parsed, int) and not isinstance(parsed, bool):
+                parsed = float(parsed)
+            data[col] = parsed
         
         return self.db.insert(table_name, data)
     
@@ -177,8 +185,13 @@ class SQLParser:
         # Parse SET clause
         updates = {}
         for assignment in set_clause.split(','):
-            key, val = assignment.split('=')
-            updates[key.strip()] = self._parse_literal(val.strip())
+            key, val = assignment.split('=', 1)
+            key = key.strip()
+            parsed = self._parse_literal(val.strip())
+            schema_type = self.db.tables.get(table_name, {}).get('schema', {}).get(key)
+            if schema_type is float and isinstance(parsed, int) and not isinstance(parsed, bool):
+                parsed = float(parsed)
+            updates[key] = parsed
         
         # Parse WHERE conditions
         conditions = self._parse_conditions(where_clause) if where_clause else {}
@@ -253,12 +266,22 @@ class SQLParser:
         """Parse WHERE conditions into dict"""
         conditions = {}
         
-        # Handle simple equality conditions
-        if '=' in where_clause and not any(keyword in where_clause.upper() for keyword in ['AND', 'OR', 'LIKE', 'IN', 'IS']):
-            parts = where_clause.split('=')
-            if len(parts) == 2:
-                conditions[parts[0].strip()] = self._parse_literal(parts[1].strip())
-                return conditions
+        # Handle conjunctions before individual comparisons.
+        if re.search(r'\s+AND\s+', where_clause, re.IGNORECASE):
+            for clause in re.split(r'\s+AND\s+', where_clause, flags=re.IGNORECASE):
+                conditions.update(self._parse_conditions(clause))
+            return conditions
+        if re.search(r'\s+OR\s+', where_clause, re.IGNORECASE):
+            return {'$or': [self._parse_conditions(clause) for clause in re.split(r'\s+OR\s+', where_clause, flags=re.IGNORECASE)]}
+
+        # Handle equality and comparison operators.
+        comparison = re.match(r'^([A-Za-z_]\w*)\s*(>=|<=|<>|!=|=|>|<)\s*(.*?)\s*$', where_clause)
+        if comparison:
+            field, operator, literal = comparison.groups()
+            operator_map = {'=': None, '>': 'gt', '>=': 'gte', '<': 'lt', '<=': 'lte', '!=': 'ne', '<>': 'ne'}
+            parsed = self._parse_literal(literal)
+            conditions[field] = parsed if operator_map[operator] is None else {operator_map[operator]: parsed}
+            return conditions
         
         # Handle LIKE
         like_match = re.search(r'(\w+)\s+LIKE\s+[\'"]([^\'"]+)[\'"]', where_clause, re.IGNORECASE)
@@ -282,15 +305,7 @@ class SQLParser:
             conditions[null_match.group(1)] = {'is_null': True}
             return conditions
         
-        # Handle complex conditions with AND
-        if ' AND ' in where_clause.upper():
-            for clause in where_clause.split(' AND '):
-                conditions.update(self._parse_conditions(clause))
-            return conditions
-        
-        # Handle complex conditions with OR
-        if ' OR ' in where_clause.upper():
-            return {'$or': [self._parse_conditions(clause) for clause in where_clause.split(' OR ')]}
+
         
         # Default: return as is
         return conditions
@@ -359,6 +374,16 @@ class SQLParser:
                     # IS NULL condition
                     if row[key] is not None:
                         return False
+                else:
+                    for operator, target in value.items():
+                        try:
+                            if operator == 'gt' and not row[key] > target: return False
+                            if operator == 'gte' and not row[key] >= target: return False
+                            if operator == 'lt' and not row[key] < target: return False
+                            if operator == 'lte' and not row[key] <= target: return False
+                            if operator == 'ne' and row[key] == target: return False
+                        except TypeError:
+                            return False
             else:
                 # Equality condition
                 if row[key] != value:

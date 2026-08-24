@@ -4,7 +4,7 @@ Full-Text Search System for IRODB
 
 import re
 import math
-import pickle
+from . import binary_codec as codec
 from typing import List, Dict, Any, Optional, Set, Tuple
 from collections import defaultdict
 from datetime import datetime
@@ -44,7 +44,7 @@ class FullTextSearch:
             raise SearchError(f"Full-text index {index_name} already exists")
         
         table_info = self.db.tables[table_name]
-        table_data = pickle.loads(self.db._read_page(table_info['page']))
+        table_data = codec.loads(self.db._read_page(table_info['page']))
         
         # Build inverted index
         inverted_index = defaultdict(lambda: defaultdict(float))
@@ -89,9 +89,16 @@ class FullTextSearch:
         # Store in memory and persist
         self.indexes[index_name] = index_data
         
-        # Store index data in a page
+        # Store a codec-safe representation. Runtime postings remain dictionaries
+        # for fast lookup, but binary dictionaries must have string keys. Posting
+        # lists use [document_id, score] pairs so integer IDs stay typed values.
+        persisted_index = dict(index_data)
+        persisted_index['inverted_index'] = {
+            term: [[doc_id, score] for doc_id, score in postings.items()]
+            for term, postings in inverted_index.items()
+        }
         index_page = self.db._get_next_page()
-        self.db._write_page(index_page, pickle.dumps(index_data))
+        self.db._write_page(index_page, codec.dumps(persisted_index))
         self.indexes[index_name]['page'] = index_page
         
         self.db._save_metadata()
@@ -216,7 +223,7 @@ class FullTextSearch:
     
     def _get_document(self, table_name: str, doc_id: int) -> Optional[Dict[str, Any]]:
         """Get document by ID"""
-        table_data = pickle.loads(self.db._read_page(self.db.tables[table_name]['page']))
+        table_data = codec.loads(self.db._read_page(self.db.tables[table_name]['page']))
         for row in table_data['rows']:
             if row['id'] == doc_id:
                 return row.copy()

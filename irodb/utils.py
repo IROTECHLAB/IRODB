@@ -5,7 +5,7 @@ Utility functions for IRODB
 import os
 import shutil
 import json
-import pickle
+from . import binary_codec as codec
 from typing import Any, Dict, List
 from datetime import datetime
 
@@ -37,7 +37,7 @@ class DatabaseUtils:
         try:
             shutil.copy2(backup_path, self.db.db_path)
             self.db.close()
-            self.db._initialize_db()
+            self.db._create_empty_db()
             return {
                 'restored_from': backup_path,
                 'timestamp': datetime.now().isoformat()
@@ -56,7 +56,7 @@ class DatabaseUtils:
         }
         
         for table_name, table_info in self.db.tables.items():
-            table_data = pickle.loads(self.db._read_page(table_info['page']))
+            table_data = codec.loads(self.db._read_page(table_info['page']))
             data['tables'][table_name] = {
                 'schema': {k: str(v.__name__) for k, v in table_info['schema'].items()},
                 'rows': table_data['rows'],
@@ -108,13 +108,13 @@ class DatabaseUtils:
             raise ValueError(f"Table {table_name} does not exist")
         
         table_info = self.db.tables[table_name]
-        table_data = pickle.loads(self.db._read_page(table_info['page']))
+        table_data = codec.loads(self.db._read_page(table_info['page']))
         
         return {
             'table_name': table_name,
             'row_count': len(table_data['rows']),
             'page_count': 1 + (1 if table_info.get('enable_hash_index', False) else 0),
-            'estimated_size_bytes': len(pickle.dumps(table_data)),
+            'estimated_size_bytes': len(codec.dumps(table_data)),
             'hash_index_enabled': table_info.get('enable_hash_index', False)
         }
     
@@ -125,7 +125,7 @@ class DatabaseUtils:
             'file_size_bytes': os.path.getsize(self.db.db_path),
             'tables_count': len(self.db.tables),
             'tables': list(self.db.tables.keys()),
-            'total_rows': sum(len(pickle.loads(self.db._read_page(t['page']))['rows']) 
+            'total_rows': sum(len(codec.loads(self.db._read_page(t['page']))['rows']) 
                             for t in self.db.tables.values()),
             'page_cache_size': len(self.db.page_cache)
         }
