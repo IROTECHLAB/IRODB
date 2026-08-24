@@ -9,7 +9,6 @@ import unittest
 import os
 import tempfile
 import sys
-import pickle
 import json
 import shutil
 from datetime import datetime
@@ -19,6 +18,7 @@ from typing import Dict, Any, List
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from irodb import IRODB
+from irodb import binary_codec
 from irodb.exceptions import *
 from irodb.hash_system import HashManager
 from irodb.utils import DatabaseUtils
@@ -557,7 +557,7 @@ class TestAdvancedFeatures(unittest.TestCase):
         # Access database info
         info = {
             'tables': len(self.db.tables),
-            'rows': sum(len(pickle.loads(self.db._read_page(t['page']))['rows']) 
+            'rows': sum(len(binary_codec.loads(self.db._read_page(t['page']))['rows']) 
                        for t in self.db.tables.values())
         }
         
