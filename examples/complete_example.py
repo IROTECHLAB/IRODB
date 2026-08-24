@@ -547,13 +547,16 @@ def demonstrate_performance():
     # Insert 1000 rows
     start_time = time.time()
     print("  Inserting 1000 rows...")
-    for i in range(1000):
-        db.insert("perf_test", {
+    rows = [
+        {
             "id": i,
             "data": f"Performance test data {i}",
             "value": i * 1.23456789,
             "timestamp": datetime.now().isoformat()
-        })
+        }
+        for i in range(1000)
+    ]
+    db.bulk_insert("perf_test", rows)
     insert_time = time.time() - start_time
     print(f"  ✓ Insert time: {insert_time:.3f} seconds ({1000/insert_time:.1f} rows/sec)")
     
@@ -571,13 +574,15 @@ def demonstrate_performance():
     
     # Update rows
     start_time = time.time()
-    updated = db.update("perf_test", {"id": {"$lt": 100}}, {"value": 999.99})
+    with db.batch():
+        updated = db.update("perf_test", {"id": {"$lt": 100}}, {"value": 999.99})
     update_time = time.time() - start_time
     print(f"  ✓ Updated {updated} rows: {update_time:.3f} seconds")
     
     # Delete all rows
     start_time = time.time()
-    deleted = db.delete("perf_test", {})
+    with db.batch():
+        deleted = db.delete("perf_test", {})
     delete_time = time.time() - start_time
     print(f"  ✓ Deleted {deleted} rows: {delete_time:.3f} seconds")
     
@@ -641,10 +646,16 @@ def main():
         print(f"💾 Export: {JSON_EXPORT_PATH}")
         print(f"💾 Backup: {BACKUP_PATH}")
         
-        # Ask for cleanup
+        # Ask for cleanup only in an interactive terminal. Non-interactive
+        # execution must never block CI, benchmarks, or mobile shell runners.
         print("\n" + "="*70)
-        response = input("🗑️  Clean up all files? (y/n): ").strip().lower()
-        if response in ('y', 'yes'):
+        interactive = os.environ.get("IRODB_EXAMPLE_INTERACTIVE", "").strip().lower() in ('y', 'yes', '1', 'true')
+        if interactive:
+            response = input("🗑️  Clean up all files? (y/n): ").strip().lower()
+        else:
+            response = os.environ.get("IRODB_EXAMPLE_CLEANUP", "y").strip().lower()
+            print(f"🗑️  Non-interactive run: cleanup={'yes' if response in ('y', 'yes', '1', 'true') else 'no'}")
+        if response in ('y', 'yes', '1', 'true'):
             cleanup()
         else:
             print("  ℹ️  Files kept for inspection")
