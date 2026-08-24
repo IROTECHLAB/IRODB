@@ -1,0 +1,11 @@
+flowchart LR
+    A[Python API / CLI] --> B[SQLParser]
+    A --> C[IRODB Core]
+    B --> C
+    C --> D[WAL<br/>CRC + fsync + replay]
+    C --> E[Binary Codec<br/>IRB1 typed payloads]
+    C --> F[AES-GCM<br/>optional authenticated encryption]
+    E --> F
+    F --> G[(.irodb fixed pages)]
+    D --> G
+    C --> H[SHA-256 row hashes]
