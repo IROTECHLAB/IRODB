@@ -166,18 +166,6 @@ ids = db.bulk_insert("users", rows)
 
 Single-row `insert()` remains the safest choice when each row must become durable immediately. `bulk_insert()` is the smoother and much faster choice when a group of rows can be committed together.
 
-## Compact binary storage and controlled serialization
-
-IRODB writes a compact IRB2 binary format instead of pickle or JSON. It uses variable-length framing, deterministic dictionary ordering, bounded page decoding, and a strict allowlist of supported values. Unsupported Python objects, unknown type markers, oversized lengths, excessive nesting, and hostile collection sizes are rejected before the value is returned. Existing IRB1 database pages remain readable for compatibility.
-
-The benchmark for constrained devices is available as:
-
-```bash
-python benchmark_codec_android.py
-```
-
-It reports encoded size, bytes per record, encode/decode time, and peak traced memory. Run it on the target Android or low-RAM device for deployment-specific measurements.
-
 ## Optional encryption
 
 Encryption is **optional**. If you do not provide `encryption_key`, IRODB creates a normal custom-binary database. If you provide an encryption key, IRODB encrypts database pages with authenticated AES-GCM using PyCryptodome. An existing installation with only `cryptography` can use the compatibility fallback.
@@ -392,8 +380,6 @@ Install development dependencies and run the test suite:
 python -m pip install -e '.[dev]'
 python -m pytest -q
 ```
-
-The tests cover CRUD operations, schemas, custom binary storage, encryption, wrong-key handling, tamper detection, WAL replay, IRODB Query parsing, injection-shaped input, bulk inserts, hashing, indexes, utilities, and CLI behavior. The repository also includes `benchmark_production.py` for reproducible plain-versus-encrypted single-row and bulk-write measurements.
 
 ## Project structure
 
